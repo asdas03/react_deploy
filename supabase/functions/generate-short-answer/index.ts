@@ -27,7 +27,15 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    const systemPrompt = "당신은 한국어 교육 전문가입니다. 주어진 텍스트를 분석하여 주관식 문제를 생성합니다.\n\nCRITICAL: 응답은 반드시 순수 JSON 형식으로만 반환하세요. markdown code block으로 감싸지 마세요.\n\n다음 JSON 형식으로 " + questionCount + "개의 주관식 문제를 생성하세요:\n{\n  \"questions\": [\n    {\n      \"question\": \"문제 내용 (Markdown 형식)\",\n      \"answer\": \"모범 답안 (Markdown 형식)\",\n      \"keywords\": [\"핵심\", \"키워드\", \"목록\"],\n      \"explanation\": \"답안 설명 (Markdown 형식)\"\n    }\n  ]\n}\n\n규칙:\n1. 각 문제는 깊이 있는 이해를 요구해야 함\n2. 모범 답안은 2-3문장으로 구체적으로 작성\n3. keywords에는 답안에 반드시 포함되어야 할 핵심 개념 3-5개\n4. explanation에는 왜 이것이 중요한지, 어떤 맥락에서 이해해야 하는지 설명\n5. Markdown 형식을 사용하여 구조화된 내용을 작성하세요 (제목, 목록, 강조 등)\n6. 수학 공식이나 기호는 LaTeX 형식으로 작성 (예: $x^2$, $$a/b$$)\n7. 반드시 유효한 JSON만 반환";
+    const systemPrompt = `당신은 한국어 교육 전문가입니다. 주어진 텍스트를 분석하여 ${questionCount}개의 주관식 문제를 생성합니다.
+
+규칙:
+1. 각 문제는 깊이 있는 이해를 요구해야 함
+2. 모범 답안은 2-3문장으로 구체적으로 작성
+3. keywords에는 답안에 반드시 포함되어야 할 핵심 개념 3-5개
+4. explanation에는 왜 이것이 중요한지, 어떤 맥락에서 이해해야 하는지 설명
+5. Markdown 형식을 사용하여 구조화된 내용을 작성하세요 (제목, 목록, 강조 등)
+6. 수학 공식이나 기호는 LaTeX 형식으로 작성 (예: $x^2$, $$a/b$$)`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -37,11 +45,45 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
-        temperature: 0,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `다음 텍스트를 바탕으로 주관식 문제를 생성해주세요:\n\n${text}` }
         ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "generate_short_answer",
+              description: `${questionCount}개의 주관식 문제를 생성합니다.`,
+              parameters: {
+                type: "object",
+                properties: {
+                  questions: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        question: { type: "string", description: "문제 내용 (Markdown 형식)" },
+                        answer: { type: "string", description: "모범 답안 (Markdown 형식)" },
+                        keywords: { 
+                          type: "array", 
+                          items: { type: "string" },
+                          description: "핵심 키워드 3-5개"
+                        },
+                        explanation: { type: "string", description: "답안 설명 (Markdown 형식)" }
+                      },
+                      required: ["question", "answer", "keywords", "explanation"],
+                      additionalProperties: false
+                    }
+                  }
+                },
+                required: ["questions"],
+                additionalProperties: false
+              }
+            }
+          }
+        ],
+        tool_choice: { type: "function", function: { name: "generate_short_answer" } }
       }),
     });
 
@@ -58,39 +100,15 @@ serve(async (req) => {
     }
 
     const aiResponse = await response.json();
-    const content = aiResponse.choices[0].message.content;
-
-    // Extract JSON from markdown code blocks if present
-    let jsonContent = content;
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (jsonMatch) {
-      jsonContent = jsonMatch[1];
-    }
-
-    // Clean up potential JSON issues
-    jsonContent = jsonContent.trim();
+    console.log('AI response:', JSON.stringify(aiResponse));
     
-    let result;
-    try {
-      result = JSON.parse(jsonContent);
-    } catch (parseError) {
-      console.error('Initial JSON parse failed:', parseError);
-      console.log('Attempting to clean JSON content...');
-      
-      try {
-        const cleanedContent = jsonContent
-          .replace(/\\/g, '\\\\')
-          .replace(/\\\\n/g, '\\n')
-          .replace(/\\\\t/g, '\\t')
-          .replace(/\\\\"/g, '\\"');
-        
-        result = JSON.parse(cleanedContent);
-      } catch (secondError) {
-        console.error('Second parse attempt failed:', secondError);
-        console.log('Raw content:', jsonContent);
-        throw new Error('JSON 파싱에 실패했습니다. AI 응답 형식을 확인해주세요.');
-      }
+    // Extract structured output from tool call
+    const toolCall = aiResponse.choices[0].message.tool_calls?.[0];
+    if (!toolCall || toolCall.function.name !== 'generate_short_answer') {
+      throw new Error('AI가 올바른 형식으로 응답하지 않았습니다');
     }
+    
+    const result = JSON.parse(toolCall.function.arguments);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

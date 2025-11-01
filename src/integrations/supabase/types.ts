@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      bookmarked_problems: {
+        Row: {
+          answer: string
+          created_at: string
+          explanation: string | null
+          id: string
+          keywords: string[] | null
+          pdf_upload_id: string | null
+          question: string
+          question_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          answer: string
+          created_at?: string
+          explanation?: string | null
+          id?: string
+          keywords?: string[] | null
+          pdf_upload_id?: string | null
+          question: string
+          question_type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          answer?: string
+          created_at?: string
+          explanation?: string | null
+          id?: string
+          keywords?: string[] | null
+          pdf_upload_id?: string | null
+          question?: string
+          question_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookmarked_problems_pdf_upload_id_fkey"
+            columns: ["pdf_upload_id"]
+            isOneToOne: false
+            referencedRelation: "pdf_uploads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pdf_uploads: {
         Row: {
           created_at: string

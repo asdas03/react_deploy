@@ -169,8 +169,8 @@ const Menu = () => {
                   <div className="mx-auto w-16 h-16 rounded-full bg-gradient-to-br from-orange-400 to-red-600 flex items-center justify-center mb-4">
                     <BookOpen className="w-8 h-8 text-white" />
                   </div>
-                  <CardTitle>오답노트</CardTitle>
-                  <CardDescription>틀린 문제를 복습하세요</CardDescription>
+                  <CardTitle>오답노트 및 즐겨찾기</CardTitle>
+                  <CardDescription>틀린 문제와 즐겨찾기한 문제를 복습하세요</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Button className="w-full">시작하기</Button>

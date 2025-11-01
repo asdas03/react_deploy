@@ -1,4 +1,5 @@
 import { useCallback, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Upload,
   FileText,
@@ -13,6 +14,8 @@ import {
   PenLine,
   Brain,
   FileDown,
+  Star,
+  BookmarkCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -22,6 +25,8 @@ import { supabase } from "@/integrations/supabase/client";
 import * as pdfjsLib from "pdfjs-dist";
 import { createWorker } from "tesseract.js";
 import { LatexRenderer } from "./LatexRenderer";
+import problemCreationBanner from "@/assets/problem-creation-banner.png";
+import problemSolvingBanner from "@/assets/problem-solving-banner.png";
 
 // Configure PDF.js worker with unpkg CDN (more reliable)
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -92,6 +97,7 @@ interface PdfUploaderProps {
 }
 
 export const PdfUploader = ({ mode = "full" }: PdfUploaderProps) => {
+  const navigate = useNavigate();
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState(0);
@@ -114,6 +120,7 @@ export const PdfUploader = ({ mode = "full" }: PdfUploaderProps) => {
   const [shortAnswerResult, setShortAnswerResult] = useState<ShortAnswerResult | null>(null);
   const [shortAnswerAnswers, setShortAnswerAnswers] = useState<string[]>([]);
   const [showShortAnswers, setShowShortAnswers] = useState<boolean[]>([]);
+  const [bookmarkedQuestions, setBookmarkedQuestions] = useState<boolean[]>([]);
   const [isSolving, setIsSolving] = useState(false);
   const [solveResult, setSolveResult] = useState<SolveResult | null>(null);
   const [currentPdfUploadId, setCurrentPdfUploadId] = useState<string | null>(null);
@@ -622,6 +629,7 @@ export const PdfUploader = ({ mode = "full" }: PdfUploaderProps) => {
       setShortAnswerResult(data);
       setShortAnswerAnswers(new Array(data.questions.length).fill(""));
       setShowShortAnswers(new Array(data.questions.length).fill(false));
+      setBookmarkedQuestions(new Array(data.questions.length).fill(false));
       setProcessingProgress(100);
       toast({
         title: "생성 완료!",
@@ -649,17 +657,65 @@ export const PdfUploader = ({ mode = "full" }: PdfUploaderProps) => {
     const newShowAnswers = [...showShortAnswers];
     newShowAnswers[questionIndex] = true;
     setShowShortAnswers(newShowAnswers);
+    // 주관식 문제는 오답노트에 자동으로 저장하지 않음
+  };
 
-    // Save to wrong answers (user can review their answer)
-    if (shortAnswerResult) {
-      await saveWrongAnswer({
-        questionType: "short_answer",
-        question: shortAnswerResult.questions[questionIndex].question,
-        userAnswer: shortAnswerAnswers[questionIndex],
-        correctAnswer: shortAnswerResult.questions[questionIndex].answer,
-        explanation: shortAnswerResult.questions[questionIndex].explanation,
-        hint: shortAnswerResult.questions[questionIndex].keywords.join(", "),
+  const toggleBookmark = async (questionIndex: number) => {
+    if (!shortAnswerResult) return;
+
+    const newBookmarked = [...bookmarkedQuestions];
+    newBookmarked[questionIndex] = !newBookmarked[questionIndex];
+    setBookmarkedQuestions(newBookmarked);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      if (newBookmarked[questionIndex]) {
+        // 즐겨찾기 추가
+        const { error } = await supabase.from("bookmarked_problems").insert({
+          user_id: user.id,
+          pdf_upload_id: currentPdfUploadId,
+          question_type: "short_answer",
+          question: shortAnswerResult.questions[questionIndex].question,
+          answer: shortAnswerResult.questions[questionIndex].answer,
+          keywords: shortAnswerResult.questions[questionIndex].keywords,
+          explanation: shortAnswerResult.questions[questionIndex].explanation,
+        });
+
+        if (error) throw error;
+
+        toast({
+          title: "즐겨찾기 추가",
+          description: "문제가 즐겨찾기에 추가되었습니다.",
+        });
+      } else {
+        // 즐겨찾기 제거
+        const { error } = await supabase
+          .from("bookmarked_problems")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("question", shortAnswerResult.questions[questionIndex].question);
+
+        if (error) throw error;
+
+        toast({
+          title: "즐겨찾기 제거",
+          description: "문제가 즐겨찾기에서 제거되었습니다.",
+        });
+      }
+    } catch (error) {
+      console.error("즐겨찾기 오류:", error);
+      toast({
+        title: "오류",
+        description: "즐겨찾기 처리 중 오류가 발생했습니다.",
+        variant: "destructive",
       });
+      // 오류 발생 시 상태 복원
+      newBookmarked[questionIndex] = !newBookmarked[questionIndex];
+      setBookmarkedQuestions(newBookmarked);
     }
   };
 
@@ -933,15 +989,20 @@ export const PdfUploader = ({ mode = "full" }: PdfUploaderProps) => {
         </div>
       )}
       <div className="max-w-6xl mx-auto space-y-6">
-        <div className="text-center space-y-2 py-8">
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            {mode === "solve-only" ? "문제 풀기" : "Grade dream만의 문제 만들기"}
-          </h1>
-          <p className="text-lg text-muted-foreground">
-            {mode === "solve-only"
-              ? "PDF 파일을 업로드하면 자동으로 문제를 풀어드립니다"
-              : "PDF 파일을 업로드하면 자동으로 문제를 만들어드립니다"}
-          </p>
+        <div className="text-center space-y-2 py-2">
+          {mode === "solve-only" ? (
+            <img 
+              src={problemCreationBanner} 
+              alt="Grade dream만의 문제 만들기" 
+              className="mx-auto max-w-xl w-full"
+            />
+          ) : (
+            <img 
+              src={problemSolvingBanner} 
+              alt="문제 풀이" 
+              className="mx-auto max-w-xl w-full"
+            />
+          )}
         </div>
 
         {uploadHistory.length > 0 && (
@@ -1363,6 +1424,20 @@ export const PdfUploader = ({ mode = "full" }: PdfUploaderProps) => {
                         <div className="flex-1">
                           <LatexRenderer text={q.question} />
                         </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleBookmark(idx)}
+                          className="ml-2 p-1 h-8 w-8"
+                        >
+                          <Star
+                            className={`w-5 h-5 ${
+                              bookmarkedQuestions[idx]
+                                ? "fill-yellow-400 text-yellow-400"
+                                : "text-gray-400"
+                            }`}
+                          />
+                        </Button>
                       </div>
 
                       <div className="space-y-2 ml-6">
@@ -1485,6 +1560,19 @@ export const PdfUploader = ({ mode = "full" }: PdfUploaderProps) => {
               ))}
             </div>
           </Card>
+        )}
+
+        {(analysisResult || fillBlankResult || multipleChoiceResult || shortAnswerResult || solveResult) && (
+          <div className="flex justify-center mt-8 pb-4">
+            <Button
+              onClick={() => navigate("/wrong-answers")}
+              size="lg"
+              className="gap-2 px-8"
+            >
+              <BookmarkCheck className="w-5 h-5" />
+              오답노트 보러가기
+            </Button>
+          </div>
         )}
       </div>
     </div>

@@ -1,15 +1,30 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { ArrowLeft, Loader2, Trash2, BookOpen, CheckCircle, PenLine, FileText } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { LatexRenderer } from '@/components/LatexRenderer';
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { ArrowLeft, Loader2, Trash2, BookOpen, CheckCircle, PenLine, FileText, Star } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { LatexRenderer } from "@/components/LatexRenderer";
+import wrongAnswersTitle from "@/assets/wrong-answers-title.png";
+
+interface BookmarkedProblem {
+  id: string;
+  question_type: string;
+  question: string;
+  answer: string;
+  keywords?: string[];
+  explanation?: string;
+  created_at: string;
+  pdf_upload_id: string | null;
+  pdf_uploads?: {
+    file_name: string;
+  };
+}
 
 interface WrongAnswer {
   id: string;
-  question_type: 'ox' | 'fill_blank' | 'multiple_choice' | 'short_answer';
+  question_type: "ox" | "fill_blank" | "multiple_choice" | "short_answer";
   question: string;
   user_answer: string;
   correct_answer: string;
@@ -28,7 +43,7 @@ interface PdfGroup {
   count: number;
 }
 
-type QuestionType = 'ox' | 'fill_blank' | 'multiple_choice' | 'short_answer' | null;
+type QuestionType = "ox" | "fill_blank" | "multiple_choice" | "bookmarked" | null;
 
 const WrongAnswers = () => {
   const [loading, setLoading] = useState(true);
@@ -36,6 +51,7 @@ const WrongAnswers = () => {
   const [selectedPdfId, setSelectedPdfId] = useState<string | null>(null);
   const [pdfGroups, setPdfGroups] = useState<PdfGroup[]>([]);
   const [wrongAnswers, setWrongAnswers] = useState<WrongAnswer[]>([]);
+  const [bookmarkedProblems, setBookmarkedProblems] = useState<BookmarkedProblem[]>([]);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -56,9 +72,11 @@ const WrongAnswers = () => {
   }, [selectedType, selectedPdfId]);
 
   const checkAuthAndFetchData = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (!session) {
-      navigate('/auth');
+      navigate("/auth");
       return;
     }
     setLoading(false);
@@ -69,43 +87,78 @@ const WrongAnswers = () => {
 
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('wrong_answers')
-        .select(`
-          pdf_upload_id,
-          pdf_uploads (
-            file_name
+
+      if (selectedType === "bookmarked") {
+        // Fetch bookmarked problems groups
+        const { data, error } = await supabase.from("bookmarked_problems").select(`
+            pdf_upload_id,
+            pdf_uploads (
+              file_name
+            )
+          `);
+
+        if (error) throw error;
+
+        // Group by PDF and count
+        const groups = (data || []).reduce((acc: PdfGroup[], item: any) => {
+          const pdfId = item.pdf_upload_id;
+          const fileName = item.pdf_uploads?.file_name || "출처 없음";
+
+          const existing = acc.find((g) => g.pdf_upload_id === pdfId);
+          if (existing) {
+            existing.count++;
+          } else {
+            acc.push({
+              pdf_upload_id: pdfId,
+              file_name: fileName,
+              count: 1,
+            });
+          }
+          return acc;
+        }, []);
+
+        setPdfGroups(groups);
+      } else {
+        const { data, error } = await supabase
+          .from("wrong_answers")
+          .select(
+            `
+            pdf_upload_id,
+            pdf_uploads (
+              file_name
+            )
+          `,
           )
-        `)
-        .eq('question_type', selectedType);
+          .eq("question_type", selectedType);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      // Group by PDF and count
-      const groups = (data || []).reduce((acc: PdfGroup[], item: any) => {
-        const pdfId = item.pdf_upload_id;
-        const fileName = item.pdf_uploads?.file_name || '출처 없음';
-        
-        const existing = acc.find(g => g.pdf_upload_id === pdfId);
-        if (existing) {
-          existing.count++;
-        } else {
-          acc.push({
-            pdf_upload_id: pdfId,
-            file_name: fileName,
-            count: 1,
-          });
-        }
-        return acc;
-      }, []);
+        // Group by PDF and count
+        const groups = (data || []).reduce((acc: PdfGroup[], item: any) => {
+          const pdfId = item.pdf_upload_id;
+          const fileName = item.pdf_uploads?.file_name || "출처 없음";
 
-      setPdfGroups(groups);
+          const existing = acc.find((g) => g.pdf_upload_id === pdfId);
+          if (existing) {
+            existing.count++;
+          } else {
+            acc.push({
+              pdf_upload_id: pdfId,
+              file_name: fileName,
+              count: 1,
+            });
+          }
+          return acc;
+        }, []);
+
+        setPdfGroups(groups);
+      }
     } catch (error) {
-      console.error('PDF 목록 불러오기 오류:', error);
+      console.error("PDF 목록 불러오기 오류:", error);
       toast({
-        title: '오류',
-        description: 'PDF 목록을 불러오는 중 오류가 발생했습니다.',
-        variant: 'destructive',
+        title: "오류",
+        description: "PDF 목록을 불러오는 중 오류가 발생했습니다.",
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -117,34 +170,64 @@ const WrongAnswers = () => {
 
     try {
       setLoading(true);
-      let query = supabase
-        .from('wrong_answers')
-        .select(`
-          *,
-          pdf_uploads (
-            file_name
+
+      if (selectedType === "bookmarked") {
+        // Fetch bookmarked problems
+        let query = supabase
+          .from("bookmarked_problems")
+          .select(
+            `
+            *,
+            pdf_uploads (
+              file_name
+            )
+          `,
           )
-        `)
-        .eq('question_type', selectedType)
-        .order('created_at', { ascending: false });
+          .order("created_at", { ascending: false });
 
-      // Filter by PDF ID (including null for '출처 없음')
-      if (selectedPdfId === 'null') {
-        query = query.is('pdf_upload_id', null);
+        // Filter by PDF ID (including null for '출처 없음')
+        if (selectedPdfId === "null") {
+          query = query.is("pdf_upload_id", null);
+        } else {
+          query = query.eq("pdf_upload_id", selectedPdfId);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+        setBookmarkedProblems((data || []) as BookmarkedProblem[]);
       } else {
-        query = query.eq('pdf_upload_id', selectedPdfId);
+        let query = supabase
+          .from("wrong_answers")
+          .select(
+            `
+            *,
+            pdf_uploads (
+              file_name
+            )
+          `,
+          )
+          .eq("question_type", selectedType)
+          .order("created_at", { ascending: false });
+
+        // Filter by PDF ID (including null for '출처 없음')
+        if (selectedPdfId === "null") {
+          query = query.is("pdf_upload_id", null);
+        } else {
+          query = query.eq("pdf_upload_id", selectedPdfId);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+        setWrongAnswers((data || []) as WrongAnswer[]);
       }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setWrongAnswers((data || []) as WrongAnswer[]);
     } catch (error) {
-      console.error('오답 불러오기 오류:', error);
+      console.error("오답 불러오기 오류:", error);
       toast({
-        title: '오류',
-        description: '오답을 불러오는 중 오류가 발생했습니다.',
-        variant: 'destructive',
+        title: "오류",
+        description: "오답을 불러오는 중 오류가 발생했습니다.",
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -155,25 +238,23 @@ const WrongAnswers = () => {
     if (selectedPdfId !== null) {
       setSelectedPdfId(null);
       setWrongAnswers([]);
+      setBookmarkedProblems([]);
     } else if (selectedType) {
       setSelectedType(null);
       setPdfGroups([]);
     } else {
-      navigate('/');
+      navigate("/");
     }
   };
 
   const deleteWrongAnswer = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('wrong_answers')
-        .delete()
-        .eq('id', id);
+      const { error } = await supabase.from("wrong_answers").delete().eq("id", id);
 
       if (error) throw error;
 
-      setWrongAnswers(wrongAnswers.filter(wa => wa.id !== id));
-      
+      setWrongAnswers(wrongAnswers.filter((wa) => wa.id !== id));
+
       // Refresh PDF groups count
       if (wrongAnswers.length === 1) {
         // If this was the last question, go back
@@ -184,15 +265,46 @@ const WrongAnswers = () => {
       }
 
       toast({
-        title: '삭제 완료',
-        description: '오답이 삭제되었습니다.',
+        title: "삭제 완료",
+        description: "오답이 삭제되었습니다.",
       });
     } catch (error) {
-      console.error('삭제 오류:', error);
+      console.error("삭제 오류:", error);
       toast({
-        title: '오류',
-        description: '오답을 삭제하는 중 오류가 발생했습니다.',
-        variant: 'destructive',
+        title: "오류",
+        description: "오답을 삭제하는 중 오류가 발생했습니다.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteBookmarkedProblem = async (id: string) => {
+    try {
+      const { error } = await supabase.from("bookmarked_problems").delete().eq("id", id);
+
+      if (error) throw error;
+
+      setBookmarkedProblems(bookmarkedProblems.filter((bp) => bp.id !== id));
+
+      // Refresh PDF groups count
+      if (bookmarkedProblems.length === 1) {
+        // If this was the last question, go back
+        handleBack();
+      } else {
+        // Update the count in pdfGroups
+        fetchPdfGroups();
+      }
+
+      toast({
+        title: "삭제 완료",
+        description: "즐겨찾기가 삭제되었습니다.",
+      });
+    } catch (error) {
+      console.error("삭제 오류:", error);
+      toast({
+        title: "오류",
+        description: "즐겨찾기를 삭제하는 중 오류가 발생했습니다.",
+        variant: "destructive",
       });
     }
   };
@@ -209,31 +321,31 @@ const WrongAnswers = () => {
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/30">
       <div className="container mx-auto p-4 md:p-8">
         <div className="flex justify-start mb-6">
-          <Button
-            variant="outline"
-            onClick={handleBack}
-            className="gap-2"
-          >
+          <Button variant="outline" onClick={handleBack} className="gap-2">
             <ArrowLeft className="w-4 h-4" />
-            {selectedPdfId ? 'PDF 목록으로' : selectedType ? '문제 유형 선택으로' : '메뉴로 돌아가기'}
+            {selectedPdfId ? "PDF 목록으로" : selectedType ? "문제 유형 선택으로" : "메뉴로 돌아가기"}
           </Button>
         </div>
 
-        <div className="text-center space-y-2 py-8">
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            오답노트
-          </h1>
-          <p className="text-lg text-muted-foreground">
-            {selectedPdfId ? '틀린 문제를 다시 복습해보세요' : selectedType ? 'PDF를 선택하세요' : '문제 유형을 선택하세요'}
-          </p>
+        <div className="text-center space-y-6 py-8">
+          <img
+            src={wrongAnswersTitle}
+            alt="다시 보기 - 틀렸던 문제 또는 헷갈렸던 문제를 모아서 보여줍니다"
+            className="mx-auto max-w-xl w-full h-auto"
+          />
+          {(selectedPdfId || selectedType) && (
+            <p className="text-lg text-muted-foreground">
+              {selectedPdfId ? "문제를 다시 복습해보세요" : "PDF를 선택하세요"}
+            </p>
+          )}
         </div>
 
         {/* Question Type Selection */}
         {!selectedType && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
-            <Card 
+            <Card
               className="p-8 hover:shadow-lg transition-all cursor-pointer hover:scale-105"
-              onClick={() => setSelectedType('ox')}
+              onClick={() => setSelectedType("ox")}
             >
               <div className="text-center space-y-4">
                 <div className="mx-auto w-20 h-20 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
@@ -244,9 +356,9 @@ const WrongAnswers = () => {
               </div>
             </Card>
 
-            <Card 
+            <Card
               className="p-8 hover:shadow-lg transition-all cursor-pointer hover:scale-105"
-              onClick={() => setSelectedType('fill_blank')}
+              onClick={() => setSelectedType("fill_blank")}
             >
               <div className="text-center space-y-4">
                 <div className="mx-auto w-20 h-20 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
@@ -257,9 +369,9 @@ const WrongAnswers = () => {
               </div>
             </Card>
 
-            <Card 
+            <Card
               className="p-8 hover:shadow-lg transition-all cursor-pointer hover:scale-105"
-              onClick={() => setSelectedType('multiple_choice')}
+              onClick={() => setSelectedType("multiple_choice")}
             >
               <div className="text-center space-y-4">
                 <div className="mx-auto w-20 h-20 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
@@ -270,16 +382,16 @@ const WrongAnswers = () => {
               </div>
             </Card>
 
-            <Card 
+            <Card
               className="p-8 hover:shadow-lg transition-all cursor-pointer hover:scale-105"
-              onClick={() => setSelectedType('short_answer')}
+              onClick={() => setSelectedType("bookmarked")}
             >
               <div className="text-center space-y-4">
-                <div className="mx-auto w-20 h-20 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center">
-                  <FileText className="w-10 h-10 text-white" />
+                <div className="mx-auto w-20 h-20 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center">
+                  <Star className="w-10 h-10 text-white" />
                 </div>
-                <h3 className="text-2xl font-bold">주관식</h3>
-                <p className="text-muted-foreground">주관식 문제에서 작성한 답변들을 복습합니다</p>
+                <h3 className="text-2xl font-bold">즐겨찾기</h3>
+                <p className="text-muted-foreground">즐겨찾기한 주관식 문제들을 복습합니다</p>
               </div>
             </Card>
           </div>
@@ -295,18 +407,22 @@ const WrongAnswers = () => {
             ) : pdfGroups.length === 0 ? (
               <Card className="p-12 text-center">
                 <BookOpen className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-xl font-semibold mb-2">저장된 오답이 없습니다</h3>
+                <h3 className="text-xl font-semibold mb-2">
+                  {selectedType === "bookmarked" ? "저장된 즐겨찾기가 없습니다" : "저장된 오답이 없습니다"}
+                </h3>
                 <p className="text-muted-foreground">
-                  {selectedType === 'ox' ? 'O/X 퀴즈' : selectedType === 'fill_blank' ? '빈칸 채우기' : selectedType === 'multiple_choice' ? '객관식' : '주관식'} 문제를 풀고 틀린 문제가 자동으로 저장됩니다
+                  {selectedType === "bookmarked"
+                    ? "주관식 문제에서 별표를 눌러 즐겨찾기에 추가하세요"
+                    : `${selectedType === "ox" ? "O/X 퀴즈" : selectedType === "fill_blank" ? "빈칸 채우기" : "객관식"} 문제를 풀고 틀린 문제가 자동으로 저장됩니다`}
                 </p>
               </Card>
             ) : (
               <div className="space-y-4">
                 {pdfGroups.map((group) => (
-                  <Card 
-                    key={group.pdf_upload_id || 'null'}
+                  <Card
+                    key={group.pdf_upload_id || "null"}
                     className="p-6 hover:shadow-lg transition-all cursor-pointer hover:border-primary"
-                    onClick={() => setSelectedPdfId(group.pdf_upload_id || 'null')}
+                    onClick={() => setSelectedPdfId(group.pdf_upload_id || "null")}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
@@ -315,7 +431,9 @@ const WrongAnswers = () => {
                         </div>
                         <div>
                           <h3 className="font-semibold text-lg">{group.file_name}</h3>
-                          <p className="text-sm text-muted-foreground">틀린 문제 {group.count}개</p>
+                          <p className="text-sm text-muted-foreground">
+                            {selectedType === "bookmarked" ? `즐겨찾기 ${group.count}개` : `틀린 문제 ${group.count}개`}
+                          </p>
                         </div>
                       </div>
                       <ArrowLeft className="w-5 h-5 rotate-180 text-muted-foreground" />
@@ -334,6 +452,89 @@ const WrongAnswers = () => {
               <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
+            ) : selectedType === "bookmarked" ? (
+              bookmarkedProblems.length === 0 ? (
+                <Card className="p-12 text-center">
+                  <BookOpen className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                  <h3 className="text-xl font-semibold mb-2">저장된 즐겨찾기가 없습니다</h3>
+                  <p className="text-muted-foreground">주관식 문제에서 별표를 눌러 즐겨찾기에 추가하세요</p>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {bookmarkedProblems.map((problem) => (
+                    <Card key={problem.id} className="p-6 animate-in fade-in-50 duration-500">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100">
+                              즐겨찾기
+                            </span>
+                            {problem.pdf_uploads?.file_name && (
+                              <span className="text-xs text-muted-foreground">
+                                출처: {problem.pdf_uploads.file_name}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(problem.created_at).toLocaleString("ko-KR")}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteBookmarkedProblem(problem.id)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="bg-muted p-4 rounded-lg">
+                          <p className="font-medium text-sm text-muted-foreground mb-2">문제</p>
+                          <div className="font-medium">
+                            <LatexRenderer text={problem.question} />
+                          </div>
+                        </div>
+
+                        <div className="bg-green-50 dark:bg-green-950/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                          <p className="font-medium text-sm text-green-600 dark:text-green-400 mb-2">✅ 모범 답안</p>
+                          <div className="font-medium">
+                            <LatexRenderer text={problem.answer} />
+                          </div>
+                        </div>
+
+                        {problem.keywords && problem.keywords.length > 0 && (
+                          <div className="bg-amber-50 dark:bg-amber-950/20 p-4 rounded-lg">
+                            <p className="font-medium text-sm text-amber-900 dark:text-amber-100 mb-2">
+                              🔑 핵심 키워드
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {problem.keywords.map((keyword, kidx) => (
+                                <span
+                                  key={kidx}
+                                  className="px-2 py-1 bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 rounded text-sm"
+                                >
+                                  {keyword}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {problem.explanation && (
+                          <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg">
+                            <p className="font-medium text-sm text-blue-900 dark:text-blue-100 mb-2">📖 해설</p>
+                            <div className="text-sm text-blue-800 dark:text-blue-200">
+                              <LatexRenderer text={problem.explanation} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )
             ) : wrongAnswers.length === 0 ? (
               <Card className="p-12 text-center">
                 <BookOpen className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
@@ -347,16 +548,24 @@ const WrongAnswers = () => {
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                            wrongAnswer.question_type === 'ox' 
-                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100'
-                              : wrongAnswer.question_type === 'fill_blank'
-                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100'
-                              : wrongAnswer.question_type === 'multiple_choice'
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100'
-                              : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100'
-                          }`}>
-                            {wrongAnswer.question_type === 'ox' ? 'O/X 퀴즈' : wrongAnswer.question_type === 'fill_blank' ? '빈칸 채우기' : wrongAnswer.question_type === 'multiple_choice' ? '객관식' : '주관식'}
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-semibold ${
+                              wrongAnswer.question_type === "ox"
+                                ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100"
+                                : wrongAnswer.question_type === "fill_blank"
+                                  ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100"
+                                  : wrongAnswer.question_type === "multiple_choice"
+                                    ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
+                                    : "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100"
+                            }`}
+                          >
+                            {wrongAnswer.question_type === "ox"
+                              ? "O/X 퀴즈"
+                              : wrongAnswer.question_type === "fill_blank"
+                                ? "빈칸 채우기"
+                                : wrongAnswer.question_type === "multiple_choice"
+                                  ? "객관식"
+                                  : "주관식"}
                           </span>
                           {wrongAnswer.pdf_uploads?.file_name && (
                             <span className="text-xs text-muted-foreground">
@@ -365,7 +574,7 @@ const WrongAnswers = () => {
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          {new Date(wrongAnswer.created_at).toLocaleString('ko-KR')}
+                          {new Date(wrongAnswer.created_at).toLocaleString("ko-KR")}
                         </p>
                       </div>
                       <Button
@@ -388,18 +597,14 @@ const WrongAnswers = () => {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="bg-red-50 dark:bg-red-950/20 p-4 rounded-lg border border-red-200 dark:border-red-800">
-                          <p className="font-medium text-sm text-red-600 dark:text-red-400 mb-2">
-                            ❌ 내 답변
-                          </p>
+                          <p className="font-medium text-sm text-red-600 dark:text-red-400 mb-2">❌ 내 답변</p>
                           <div className="font-medium">
                             <LatexRenderer text={wrongAnswer.user_answer} />
                           </div>
                         </div>
 
                         <div className="bg-green-50 dark:bg-green-950/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
-                          <p className="font-medium text-sm text-green-600 dark:text-green-400 mb-2">
-                            ✅ 정답
-                          </p>
+                          <p className="font-medium text-sm text-green-600 dark:text-green-400 mb-2">✅ 정답</p>
                           <div className="font-medium">
                             <LatexRenderer text={wrongAnswer.correct_answer} />
                           </div>
@@ -408,9 +613,7 @@ const WrongAnswers = () => {
 
                       {wrongAnswer.explanation && (
                         <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg">
-                          <p className="font-medium text-sm text-blue-900 dark:text-blue-100 mb-2">
-                            📖 해설
-                          </p>
+                          <p className="font-medium text-sm text-blue-900 dark:text-blue-100 mb-2">📖 해설</p>
                           <div className="text-sm text-blue-800 dark:text-blue-200">
                             <LatexRenderer text={wrongAnswer.explanation} />
                           </div>
@@ -419,9 +622,7 @@ const WrongAnswers = () => {
 
                       {wrongAnswer.hint && (
                         <div className="bg-amber-50 dark:bg-amber-950/20 p-4 rounded-lg">
-                          <p className="font-medium text-sm text-amber-900 dark:text-amber-100 mb-2">
-                            💡 힌트
-                          </p>
+                          <p className="font-medium text-sm text-amber-900 dark:text-amber-100 mb-2">💡 힌트</p>
                           <div className="text-sm text-amber-800 dark:text-amber-200">
                             <LatexRenderer text={wrongAnswer.hint} />
                           </div>

@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Loader2, AlertCircle, Lightbulb } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import recommendedProblemsTitle from "@/assets/recommended-problems-title.png";
 
 interface WeaknessAnalysis {
   category: string;
@@ -40,13 +41,15 @@ const RecommendedProblems = () => {
   }, [navigate]);
 
   const checkAuthAndFetchData = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
     if (!session) {
-      navigate('/auth');
+      navigate("/auth");
       return;
     }
-    
+
     setUser(session.user);
     await fetchPdfList(session.user.id);
     setLoading(false);
@@ -54,17 +57,17 @@ const RecommendedProblems = () => {
 
   const fetchPdfList = async (userId: string) => {
     const { data, error } = await supabase
-      .from('pdf_uploads')
-      .select('id, file_name, extracted_text')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .from("pdf_uploads")
+      .select("id, file_name, extracted_text")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
 
     if (error) {
-      console.error('PDF 목록 로드 실패:', error);
+      console.error("PDF 목록 로드 실패:", error);
       toast({
-        title: '오류',
-        description: 'PDF 목록을 불러오는데 실패했습니다.',
-        variant: 'destructive',
+        title: "오류",
+        description: "PDF 목록을 불러오는데 실패했습니다.",
+        variant: "destructive",
       });
     } else {
       setPdfList(data || []);
@@ -75,36 +78,36 @@ const RecommendedProblems = () => {
     try {
       // Fetch wrong answers for specific PDF
       const { data: wrongAnswers, error } = await supabase
-        .from('wrong_answers')
-        .select('question, question_type, pdf_upload_id')
-        .eq('user_id', userId)
-        .eq('pdf_upload_id', pdfId);
+        .from("wrong_answers")
+        .select("question, question_type, pdf_upload_id")
+        .eq("user_id", userId)
+        .eq("pdf_upload_id", pdfId);
 
       if (error) throw error;
 
       if (!wrongAnswers || wrongAnswers.length === 0) {
         toast({
-          title: '오답 없음',
-          description: '해당 PDF에 대한 오답이 없습니다.',
-          variant: 'destructive',
+          title: "오답 없음",
+          description: "해당 PDF에 대한 오답이 없습니다.",
+          variant: "destructive",
         });
         return null;
       }
 
       // Call edge function to analyze weaknesses
-      const { data: analysisData, error: functionError } = await supabase.functions.invoke('analyze-weaknesses', {
-        body: { wrongAnswers }
+      const { data: analysisData, error: functionError } = await supabase.functions.invoke("analyze-weaknesses", {
+        body: { wrongAnswers },
       });
 
       if (functionError) throw functionError;
 
       return analysisData.weaknesses || [];
     } catch (error: any) {
-      console.error('약점 분석 실패:', error);
+      console.error("약점 분석 실패:", error);
       toast({
-        title: '분석 실패',
-        description: error.message || '약점을 분석하는데 실패했습니다.',
-        variant: 'destructive',
+        title: "분석 실패",
+        description: error.message || "약점을 분석하는데 실패했습니다.",
+        variant: "destructive",
       });
       return null;
     }
@@ -112,7 +115,7 @@ const RecommendedProblems = () => {
 
   const handlePdfSelection = async (pdfId: string) => {
     if (!user) return;
-    
+
     setSelectedPdf(pdfId);
     setGenerating(true);
     setWeaknesses([]);
@@ -130,31 +133,31 @@ const RecommendedProblems = () => {
       setWeaknesses(analyzedWeaknesses);
 
       // 2. Generate recommended problems
-      const pdf = pdfList.find(p => p.id === pdfId);
+      const pdf = pdfList.find((p) => p.id === pdfId);
       if (!pdf || !pdf.extracted_text) {
-        throw new Error('PDF 텍스트를 찾을 수 없습니다.');
+        throw new Error("PDF 텍스트를 찾을 수 없습니다.");
       }
 
-      const { data, error } = await supabase.functions.invoke('generate-recommended-problems', {
+      const { data, error } = await supabase.functions.invoke("generate-recommended-problems", {
         body: {
           weaknesses: analyzedWeaknesses,
           pdfText: pdf.extracted_text,
-        }
+        },
       });
 
       if (error) throw error;
 
       setRecommendedProblems(data.problems || []);
       toast({
-        title: '완료',
-        description: '추천 문제가 생성되었습니다.',
+        title: "완료",
+        description: "추천 문제가 생성되었습니다.",
       });
     } catch (error: any) {
-      console.error('문제 생성 실패:', error);
+      console.error("문제 생성 실패:", error);
       toast({
-        title: '문제 생성 실패',
-        description: error.message || '추천 문제를 생성하는데 실패했습니다.',
-        variant: 'destructive',
+        title: "문제 생성 실패",
+        description: error.message || "추천 문제를 생성하는데 실패했습니다.",
+        variant: "destructive",
       });
     } finally {
       setGenerating(false);
@@ -173,24 +176,14 @@ const RecommendedProblems = () => {
     <div className="min-h-screen bg-gradient-to-br from-background to-muted">
       <div className="container mx-auto p-4 max-w-6xl">
         <div className="flex justify-start mb-4">
-          <Button
-            variant="outline"
-            onClick={() => navigate('/')}
-            className="gap-2"
-          >
+          <Button variant="outline" onClick={() => navigate("/")} className="gap-2">
             <ArrowLeft className="w-4 h-4" />
             메뉴로 돌아가기
           </Button>
         </div>
 
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
-            <Lightbulb className="w-8 h-8 text-yellow-500" />
-            추천 문제 풀기
-          </h1>
-          <p className="text-muted-foreground">
-            PDF를 선택하면 해당 PDF의 오답을 분석하여 맞춤 문제를 추천합니다
-          </p>
+        <div className="mb-8 flex justify-center">
+          <img src={recommendedProblemsTitle} alt="추천 문제" className="max-w-xl w-full" />
         </div>
 
         {generating && (
@@ -204,17 +197,13 @@ const RecommendedProblems = () => {
           <Card>
             <CardHeader>
               <CardTitle>PDF 선택</CardTitle>
-              <CardDescription>
-                추천 문제를 생성할 PDF를 선택하세요
-              </CardDescription>
+              <CardDescription>추천 문제를 생성할 PDF를 선택하세요</CardDescription>
             </CardHeader>
             <CardContent>
               {pdfList.length === 0 ? (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    업로드된 PDF가 없습니다. 먼저 PDF를 업로드해주세요.
-                  </AlertDescription>
+                  <AlertDescription>업로드된 PDF가 없습니다. 먼저 PDF를 업로드해주세요.</AlertDescription>
                 </Alert>
               ) : (
                 <div className="space-y-2">
@@ -247,19 +236,17 @@ const RecommendedProblems = () => {
                     <div key={index} className="p-4 border rounded-lg">
                       <div className="flex justify-between items-start mb-2">
                         <h3 className="font-semibold text-lg">{weakness.category}</h3>
-                        <span className="text-sm text-muted-foreground">
-                          오답률: {weakness.errorRate.toFixed(1)}%
-                        </span>
+                        <span className="text-sm text-muted-foreground">오답률: {weakness.errorRate.toFixed(1)}%</span>
                       </div>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        총 {weakness.errorCount}개의 오답
-                      </p>
+                      <p className="text-sm text-muted-foreground mb-2">총 {weakness.errorCount}개의 오답</p>
                       {weakness.examples.length > 0 && (
                         <div className="text-sm">
                           <p className="font-medium mb-1">예시:</p>
                           <ul className="list-disc list-inside space-y-1">
                             {weakness.examples.slice(0, 2).map((example, i) => (
-                              <li key={i} className="text-muted-foreground">{example}</li>
+                              <li key={i} className="text-muted-foreground">
+                                {example}
+                              </li>
                             ))}
                           </ul>
                         </div>
@@ -315,10 +302,10 @@ const RecommendedProblems = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setShowAnswers(prev => ({ ...prev, [index]: !prev[index] }))}
+                          onClick={() => setShowAnswers((prev) => ({ ...prev, [index]: !prev[index] }))}
                           className="w-full"
                         >
-                          {showAnswers[index] ? '답 숨기기' : '답 보기'}
+                          {showAnswers[index] ? "답 숨기기" : "답 보기"}
                         </Button>
                         {showAnswers[index] && (
                           <div className="mt-4 space-y-3">
@@ -328,7 +315,9 @@ const RecommendedProblems = () => {
                             </div>
                             <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
                               <p className="font-medium mb-2 text-blue-900 dark:text-blue-100">📝 해설:</p>
-                              <p className="text-blue-800 dark:text-blue-200 whitespace-pre-wrap">{problem.explanation}</p>
+                              <p className="text-blue-800 dark:text-blue-200 whitespace-pre-wrap">
+                                {problem.explanation}
+                              </p>
                             </div>
                           </div>
                         )}
