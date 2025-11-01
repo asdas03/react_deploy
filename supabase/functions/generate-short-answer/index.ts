@@ -27,7 +27,7 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    const systemPrompt = "당신은 한국어 교육 전문가입니다. 주어진 텍스트를 분석하여 주관식 문제를 생성합니다.\n\nCRITICAL: 응답은 반드시 순수 JSON 형식으로만 반환하세요. markdown code block으로 감싸지 마세요.\n\n다음 JSON 형식으로 " + questionCount + "개의 주관식 문제를 생성하세요:\n{\n  \"questions\": [\n    {\n      \"question\": \"문제 내용\",\n      \"answer\": \"모범 답안\",\n      \"keywords\": [\"핵심\", \"키워드\", \"목록\"],\n      \"explanation\": \"답안 설명\"\n    }\n  ]\n}\n\n규칙:\n1. 각 문제는 깊이 있는 이해를 요구해야 함\n2. 모범 답안은 2-3문장으로 구체적으로 작성\n3. keywords에는 답안에 반드시 포함되어야 할 핵심 개념 3-5개\n4. explanation에는 왜 이것이 중요한지, 어떤 맥락에서 이해해야 하는지 설명\n5. 수학 공식이나 기호는 LaTeX 형식으로 작성 (예: $x^2$, $$a/b$$)\n6. 반드시 유효한 JSON만 반환";
+    const systemPrompt = "당신은 한국어 교육 전문가입니다. 주어진 텍스트를 분석하여 주관식 문제를 생성합니다.\n\nCRITICAL: 응답은 반드시 순수 JSON 형식으로만 반환하세요. markdown code block으로 감싸지 마세요.\n\n다음 JSON 형식으로 " + questionCount + "개의 주관식 문제를 생성하세요:\n{\n  \"questions\": [\n    {\n      \"question\": \"문제 내용 (Markdown 형식)\",\n      \"answer\": \"모범 답안 (Markdown 형식)\",\n      \"keywords\": [\"핵심\", \"키워드\", \"목록\"],\n      \"explanation\": \"답안 설명 (Markdown 형식)\"\n    }\n  ]\n}\n\n규칙:\n1. 각 문제는 깊이 있는 이해를 요구해야 함\n2. 모범 답안은 2-3문장으로 구체적으로 작성\n3. keywords에는 답안에 반드시 포함되어야 할 핵심 개념 3-5개\n4. explanation에는 왜 이것이 중요한지, 어떤 맥락에서 이해해야 하는지 설명\n5. Markdown 형식을 사용하여 구조화된 내용을 작성하세요 (제목, 목록, 강조 등)\n6. 수학 공식이나 기호는 LaTeX 형식으로 작성 (예: $x^2$, $$a/b$$)\n7. 반드시 유효한 JSON만 반환";
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',

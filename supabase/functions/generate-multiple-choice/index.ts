@@ -27,7 +27,7 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    const systemPrompt = "당신은 한국어 교육 전문가입니다. 주어진 텍스트를 분석하여 객관식 문제를 생성합니다.\n\nCRITICAL: 응답은 반드시 순수 JSON 형식으로만 반환하세요. markdown code block으로 감싸지 마세요.\n\n다음 JSON 형식으로 " + questionCount + "개의 객관식 문제를 생성하세요:\n{\n  \"questions\": [\n    {\n      \"question\": \"문제 내용\",\n      \"options\": [\"선택지1\", \"선택지2\", \"선택지3\", \"선택지4\"],\n      \"correctAnswer\": 0,\n      \"explanation\": \"정답 설명\"\n    }\n  ]\n}\n\n규칙:\n1. 각 문제는 명확하고 구체적이어야 함\n2. 4개의 선택지를 제공하며, 하나만 정답\n3. correctAnswer는 정답 선택지의 인덱스 (0-3)\n4. 선택지는 적절히 혼란스럽되 명확히 구분되어야 함\n5. explanation에는 정답에 대한 자세한 설명 포함\n6. 수학 공식이나 기호는 LaTeX 형식으로 작성 (예: $x^2$, $$a/b$$)\n7. 반드시 유효한 JSON만 반환";
+    const systemPrompt = "당신은 한국어 교육 전문가입니다. 주어진 텍스트를 분석하여 객관식 문제를 생성합니다.\n\nCRITICAL: 응답은 반드시 순수 JSON 형식으로만 반환하세요. markdown code block으로 감싸지 마세요.\n\n다음 JSON 형식으로 " + questionCount + "개의 객관식 문제를 생성하세요:\n{\n  \"questions\": [\n    {\n      \"question\": \"문제 내용 (Markdown 형식)\",\n      \"options\": [\"선택지1 (Markdown 형식)\", \"선택지2\", \"선택지3\", \"선택지4\"],\n      \"correctAnswer\": 0,\n      \"explanation\": \"정답 설명 (Markdown 형식)\"\n    }\n  ]\n}\n\n규칙:\n1. 각 문제는 명확하고 구체적이어야 함\n2. 4개의 선택지를 제공하며, 하나만 정답\n3. correctAnswer는 정답 선택지의 인덱스 (0-3)\n4. 선택지는 적절히 혼란스럽되 명확히 구분되어야 함\n5. explanation에는 정답에 대한 자세한 설명 포함\n6. Markdown 형식을 사용하여 구조화된 내용을 작성하세요 (제목, 목록, 강조 등)\n7. 수학 공식이나 기호는 LaTeX 형식으로 작성 (예: $x^2$, $$a/b$$)\n8. 반드시 유효한 JSON만 반환";
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
