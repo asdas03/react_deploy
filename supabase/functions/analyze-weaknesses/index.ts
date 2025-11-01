@@ -24,26 +24,7 @@ serve(async (req) => {
 
     console.log('약점 분석 시작...');
 
-    const systemPrompt = `당신은 학습 데이터를 분석하는 AI 분석가입니다.
-학생이 틀린 문제들을 분석하여 약점 영역을 파악하세요.
-
-응답 형식 (JSON):
-{
-  "weaknesses": [
-    {
-      "category": "약점 카테고리명 (예: 연산, 문법, 독해 등)",
-      "errorCount": 해당 카테고리의 오답 개수,
-      "errorRate": 오답률 (백분율),
-      "examples": ["오답 예시 1", "오답 예시 2"]
-    }
-  ]
-}
-
-분석 기준:
-1. 문제 유형과 내용을 기반으로 카테고리를 자동으로 분류하세요
-2. 가장 많이 틀린 카테고리 순으로 정렬하세요
-3. 각 카테고리별로 대표적인 오답 예시 2-3개를 포함하세요
-4. 오답률은 전체 문제 대비 해당 카테고리의 비율로 계산하세요`;
+    const systemPrompt = "당신은 학습 데이터를 분석하는 AI 분석가입니다. 학생이 틀린 문제들을 분석하여 약점 영역을 파악하세요.\n\nCRITICAL: 응답은 반드시 순수 JSON 형식으로만 반환하세요. markdown code block으로 감싸지 마세요.\n\n응답 형식:\n{\n  \"weaknesses\": [\n    {\n      \"category\": \"약점 카테고리명 (예: 연산, 문법, 독해 등)\",\n      \"errorCount\": 해당 카테고리의 오답 개수,\n      \"errorRate\": 오답률 (백분율),\n      \"examples\": [\"오답 예시 1\", \"오답 예시 2\"]\n    }\n  ]\n}\n\n분석 기준:\n1. 문제 유형과 내용을 기반으로 카테고리를 자동으로 분류하세요\n2. 가장 많이 틀린 카테고리 순으로 정렬하세요\n3. 각 카테고리별로 대표적인 오답 예시 2-3개를 포함하세요\n4. 오답률은 전체 문제 대비 해당 카테고리의 비율로 계산하세요";
 
     const wrongAnswersText = wrongAnswers.map((wa: any, index: number) => 
       `문제 ${index + 1}: ${wa.question} (유형: ${wa.question_type})`

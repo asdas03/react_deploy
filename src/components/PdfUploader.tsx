@@ -935,9 +935,13 @@ export const PdfUploader = ({ mode = "full" }: PdfUploaderProps) => {
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="text-center space-y-2 py-8">
           <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            Grade dream만의 문제 만들기
+            {mode === "solve-only" ? "문제 풀기" : "Grade dream만의 문제 만들기"}
           </h1>
-          <p className="text-lg text-muted-foreground">PDF 파일을 업로드하면 자동으로 문제를 만들어드립니다</p>
+          <p className="text-lg text-muted-foreground">
+            {mode === "solve-only"
+              ? "PDF 파일을 업로드하면 자동으로 문제를 풀어드립니다"
+              : "PDF 파일을 업로드하면 자동으로 문제를 만들어드립니다"}
+          </p>
         </div>
 
         {uploadHistory.length > 0 && (
@@ -992,6 +996,7 @@ export const PdfUploader = ({ mode = "full" }: PdfUploaderProps) => {
                 {isProcessing ? "PDF 처리 중..." : "PDF 파일을 드래그하거나 클릭하세요"}
               </h3>
               <p className="text-muted-foreground">지원 형식: PDF(50MB이하)</p>
+              <br></br>
             </div>
             <label htmlFor="file-upload">
               <Button variant="default" size="lg" className="cursor-pointer" disabled={isProcessing} asChild>
