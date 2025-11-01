@@ -234,17 +234,31 @@ export const PdfUploader = ({ mode = "full" }: PdfUploaderProps) => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) throw new Error("로그인이 필요합니다");
+      
+      if (!user) {
+        console.error("사용자 인증 실패: 로그인되지 않음");
+        throw new Error("로그인이 필요합니다");
+      }
+
+      console.log("PDF 저장 시작:", { userId: user.id, fileName: file.name });
 
       // Upload to storage with safe file path
       const timestamp = Date.now();
       const fileExt = file.name.split(".").pop();
       const safeFilePath = `${user.id}/${timestamp}.${fileExt}`;
+      
+      console.log("스토리지 업로드 시도:", safeFilePath);
       const { error: uploadError } = await supabase.storage.from("pdfs").upload(safeFilePath, file);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("스토리지 업로드 오류:", uploadError);
+        throw uploadError;
+      }
+      
+      console.log("스토리지 업로드 성공");
 
       // Save metadata to database
+      console.log("데이터베이스 저장 시도");
       const { data: uploadData, error: dbError } = await supabase
         .from("pdf_uploads")
         .insert({
@@ -256,7 +270,12 @@ export const PdfUploader = ({ mode = "full" }: PdfUploaderProps) => {
         .select()
         .single();
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        console.error("데이터베이스 저장 오류:", dbError);
+        throw dbError;
+      }
+      
+      console.log("데이터베이스 저장 성공:", uploadData);
 
       // Set current PDF upload ID
       if (uploadData) {
@@ -265,11 +284,13 @@ export const PdfUploader = ({ mode = "full" }: PdfUploaderProps) => {
 
       // Refresh history
       await fetchUploadHistory();
+      
+      console.log("PDF 저장 완료");
     } catch (error) {
-      console.error("데이터베이스 저장 오류:", error);
+      console.error("데이터베이스 저장 오류 상세:", error);
       toast({
         title: "저장 오류",
-        description: "파일을 저장하는 중 오류가 발생했습니다.",
+        description: error instanceof Error ? error.message : "파일을 저장하는 중 오류가 발생했습니다.",
         variant: "destructive",
       });
     }

@@ -49,6 +49,11 @@ const Auth = () => {
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            name,
+            school,
+            student_id: studentId,
+          },
         },
       });
 
@@ -67,28 +72,10 @@ const Auth = () => {
           });
         }
       } else if (data.user) {
-        // Create profile after successful signup
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .insert({
-            user_id: data.user.id,
-            name,
-            student_id: studentId,
-            school,
-          });
-
-        if (profileError) {
-          toast({
-            title: "프로필 생성 실패",
-            description: "프로필 정보를 저장하지 못했습니다.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "회원가입 성공",
-            description: "환영합니다!",
-          });
-        }
+        toast({
+          title: "회원가입 성공",
+          description: "환영합니다!",
+        });
       }
     } catch (error) {
       toast({

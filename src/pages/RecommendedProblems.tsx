@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { LatexRenderer } from "@/components/LatexRenderer";
 import recommendedProblemsTitle from "@/assets/recommended-problems-title.png";
 
 interface WeaknessAnalysis {
@@ -234,11 +235,9 @@ const RecommendedProblems = () => {
                 <div className="space-y-4">
                   {weaknesses.map((weakness, index) => (
                     <div key={index} className="p-4 border rounded-lg">
-                      <div className="flex justify-between items-start mb-2">
+                      <div className="mb-2">
                         <h3 className="font-semibold text-lg">{weakness.category}</h3>
-                        <span className="text-sm text-muted-foreground">오답률: {weakness.errorRate.toFixed(1)}%</span>
                       </div>
-                      <p className="text-sm text-muted-foreground mb-2">총 {weakness.errorCount}개의 오답</p>
                       {weakness.examples.length > 0 && (
                         <div className="text-sm">
                           <p className="font-medium mb-1">예시:</p>
@@ -290,12 +289,12 @@ const RecommendedProblems = () => {
                     <CardContent className="space-y-4">
                       <div>
                         <p className="font-medium mb-2">문제:</p>
-                        <p className="whitespace-pre-wrap">{problem.problem}</p>
+                        <LatexRenderer text={problem.problem} />
                       </div>
                       {problem.hint && (
                         <div className="p-3 bg-muted rounded-lg">
                           <p className="font-medium mb-1 text-sm">💡 힌트:</p>
-                          <p className="text-sm">{problem.hint}</p>
+                          <LatexRenderer text={problem.hint} />
                         </div>
                       )}
                       <div>
@@ -311,13 +310,15 @@ const RecommendedProblems = () => {
                           <div className="mt-4 space-y-3">
                             <div className="p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
                               <p className="font-medium mb-2 text-green-900 dark:text-green-100">✓ 정답:</p>
-                              <p className="text-green-800 dark:text-green-200 whitespace-pre-wrap">{problem.answer}</p>
+                              <div className="text-green-800 dark:text-green-200">
+                                <LatexRenderer text={problem.answer} />
+                              </div>
                             </div>
                             <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
                               <p className="font-medium mb-2 text-blue-900 dark:text-blue-100">📝 해설:</p>
-                              <p className="text-blue-800 dark:text-blue-200 whitespace-pre-wrap">
-                                {problem.explanation}
-                              </p>
+                              <div className="text-blue-800 dark:text-blue-200">
+                                <LatexRenderer text={problem.explanation} />
+                              </div>
                             </div>
                           </div>
                         )}
