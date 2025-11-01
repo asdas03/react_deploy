@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { text } = await req.json();
+    const { text, questionCount = 5 } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     if (!LOVABLE_API_KEY) {
@@ -20,6 +20,13 @@ serve(async (req) => {
 
     if (!text || text.trim().length === 0) {
       return new Response(JSON.stringify({ error: "텍스트가 비어있습니다" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (![5, 10, 15].includes(questionCount)) {
+      return new Response(JSON.stringify({ error: "문제 수는 5, 10, 15개 중 하나여야 합니다" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -41,7 +48,7 @@ serve(async (req) => {
           },
           {
             role: "user",
-            content: `다음 텍스트를 분석하여:\n1. 5개의 O/X 퀴즈 문제를 만들어주세요\n2. 핵심 내용을 3-5문장으로 요약해주세요\n\n텍스트:\n${text}`,
+            content: `다음 텍스트를 분석하여:\n1. ${questionCount}개의 O/X 퀴즈 문제를 만들어주세요\n2. 핵심 내용을 3-5문장으로 요약해주세요\n\n텍스트:\n${text}`,
           },
         ],
         tools: [
@@ -65,8 +72,8 @@ serve(async (req) => {
                       required: ["question", "answer", "explanation"],
                       additionalProperties: false,
                     },
-                    minItems: 5,
-                    maxItems: 5,
+                    minItems: questionCount,
+                    maxItems: questionCount,
                   },
                   summary: {
                     type: "string",

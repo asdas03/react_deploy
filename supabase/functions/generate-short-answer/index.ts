@@ -12,10 +12,14 @@ serve(async (req) => {
   }
 
   try {
-    const { text } = await req.json();
+    const { text, questionCount = 5 } = await req.json();
     
     if (!text) {
       throw new Error('텍스트가 제공되지 않았습니다');
+    }
+
+    if (![5, 10, 15].includes(questionCount)) {
+      throw new Error('문제 수는 5, 10, 15개 중 하나여야 합니다');
     }
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -25,7 +29,7 @@ serve(async (req) => {
 
     const systemPrompt = `당신은 한국어 교육 전문가입니다. 주어진 텍스트를 분석하여 주관식 문제를 생성합니다.
 
-다음 JSON 형식으로 5개의 주관식 문제를 생성하세요:
+다음 JSON 형식으로 ${questionCount}개의 주관식 문제를 생성하세요:
 {
   "questions": [
     {

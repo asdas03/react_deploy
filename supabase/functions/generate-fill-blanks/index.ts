@@ -11,7 +11,16 @@ serve(async (req) => {
   }
 
   try {
-    const { text } = await req.json();
+    const { text, questionCount = 5 } = await req.json();
+    
+    if (!text) {
+      throw new Error('텍스트가 제공되지 않았습니다');
+    }
+
+    if (![5, 10, 15].includes(questionCount)) {
+      throw new Error('문제 수는 5, 10, 15개 중 하나여야 합니다');
+    }
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
@@ -37,11 +46,19 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: "당신은 교육 콘텐츠 전문가입니다. 주어진 텍스트를 분석하여 빈칸 채우기 문제를 생성합니다."
+            content: "당신은 교육 콘텐츠 전문가입니다. 주어진 텍스트를 분석하여 개념 중심의 빈칸 채우기 문제를 생성합니다. 시간, 날짜, 장소, 인명과 같은 세부 사항은 피하고, 핵심 개념, 이론, 원리, 정의를 중심으로 문제를 만듭니다."
           },
           {
             role: "user",
-            content: `다음 텍스트를 분석하여 5개의 빈칸 채우기 문제를 만들어주세요. 각 문제는 중요한 키워드나 개념을 빈칸으로 만들어야 합니다.\n\n텍스트:\n${text}`
+            content: `다음 텍스트를 분석하여 ${questionCount}개의 빈칸 채우기 문제를 만들어주세요. 
+
+중요한 규칙:
+- 핵심 개념, 이론, 원리, 정의를 빈칸으로 만들어야 합니다
+- 시간, 날짜, 장소, 인명 등 세부 사항은 빈칸으로 만들지 마세요
+- 학습자가 개념을 이해했는지 확인할 수 있는 문제를 만들어주세요
+
+텍스트:
+${text}`
           }
         ],
         tools: [
@@ -65,8 +82,8 @@ serve(async (req) => {
                       required: ["question", "answer", "hint"],
                       additionalProperties: false
                     },
-                    minItems: 5,
-                    maxItems: 5
+                    minItems: questionCount,
+                    maxItems: questionCount
                   }
                 },
                 required: ["questions"],

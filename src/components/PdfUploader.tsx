@@ -1,5 +1,19 @@
 import { useCallback, useState, useEffect } from "react";
-import { Upload, FileText, Copy, Download, Check, Sparkles, CheckCircle2, XCircle, History, Trash2, PenLine, Brain, FileDown } from "lucide-react";
+import {
+  Upload,
+  FileText,
+  Copy,
+  Download,
+  Check,
+  Sparkles,
+  CheckCircle2,
+  XCircle,
+  History,
+  Trash2,
+  PenLine,
+  Brain,
+  FileDown,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -74,12 +88,13 @@ interface PdfUploadRecord {
 }
 
 interface PdfUploaderProps {
-  mode?: 'full' | 'solve-only';
+  mode?: "full" | "solve-only";
 }
 
-export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
+export const PdfUploader = ({ mode = "full" }: PdfUploaderProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState(0);
   const [extractedText, setExtractedText] = useState("");
   const [fileName, setFileName] = useState("");
   const [copied, setCopied] = useState(false);
@@ -102,6 +117,7 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
   const [isSolving, setIsSolving] = useState(false);
   const [solveResult, setSolveResult] = useState<SolveResult | null>(null);
   const [currentPdfUploadId, setCurrentPdfUploadId] = useState<string | null>(null);
+  const [questionCount, setQuestionCount] = useState<5 | 10 | 15>(5);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -110,35 +126,44 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
 
   const fetchUploadHistory = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data, error } = await supabase
-        .from('pdf_uploads')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.from("pdf_uploads").select("*").order("created_at", { ascending: false });
 
       if (error) throw error;
       setUploadHistory(data || []);
     } catch (error) {
-      console.error('업로드 기록 불러오기 오류:', error);
+      console.error("업로드 기록 불러오기 오류:", error);
     }
   };
 
   const extractTextFromPdf = async (file: File) => {
     setIsProcessing(true);
+    setProcessingProgress(0);
     setFileName(file.name);
 
     try {
       const arrayBuffer = await file.arrayBuffer();
+      setProcessingProgress(10);
+
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const totalPages = pdf.numPages;
+      setProcessingProgress(20);
+
       let fullText = "";
 
       // Initialize Tesseract worker for OCR
       const worker = await createWorker("kor+eng");
 
-      for (let i = 1; i <= pdf.numPages; i++) {
+      for (let i = 1; i <= totalPages; i++) {
         const page = await pdf.getPage(i);
+
+        // 페이지 처리 진행률 업데이트 (20%에서 80%까지)
+        const pageProgress = 20 + Math.round((i / totalPages) * 60);
+        setProcessingProgress(pageProgress);
 
         // Extract text content
         const textContent = await page.getTextContent();
@@ -171,16 +196,18 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
       }
 
       await worker.terminate();
+      setProcessingProgress(90);
 
       const extractedContent = fullText.trim();
       setExtractedText(extractedContent);
 
       // Save to database and storage
       await savePdfToDatabase(file, extractedContent);
+      setProcessingProgress(100);
 
       toast({
         title: "성공!",
-        description: `${pdf.numPages}페이지에서 텍스트와 이미지를 인식했습니다.`,
+        description: `${totalPages}페이지에서 텍스트와 이미지를 인식했습니다.`,
       });
     } catch (error) {
       console.error("PDF 처리 중 오류:", error);
@@ -191,27 +218,28 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
       });
     } finally {
       setIsProcessing(false);
+      setProcessingProgress(0);
     }
   };
 
   const savePdfToDatabase = async (file: File, extractedText: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("로그인이 필요합니다");
 
       // Upload to storage with safe file path
       const timestamp = Date.now();
-      const fileExt = file.name.split('.').pop();
+      const fileExt = file.name.split(".").pop();
       const safeFilePath = `${user.id}/${timestamp}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('pdfs')
-        .upload(safeFilePath, file);
+      const { error: uploadError } = await supabase.storage.from("pdfs").upload(safeFilePath, file);
 
       if (uploadError) throw uploadError;
 
       // Save metadata to database
       const { data: uploadData, error: dbError } = await supabase
-        .from('pdf_uploads')
+        .from("pdf_uploads")
         .insert({
           user_id: user.id,
           file_name: file.name,
@@ -266,17 +294,12 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
   const deleteUpload = async (record: PdfUploadRecord) => {
     try {
       // Delete from storage
-      const { error: storageError } = await supabase.storage
-        .from('pdfs')
-        .remove([record.file_path]);
+      const { error: storageError } = await supabase.storage.from("pdfs").remove([record.file_path]);
 
       if (storageError) throw storageError;
 
       // Delete from database
-      const { error: dbError } = await supabase
-        .from('pdf_uploads')
-        .delete()
-        .eq('id', record.id);
+      const { error: dbError } = await supabase.from("pdf_uploads").delete().eq("id", record.id);
 
       if (dbError) throw dbError;
 
@@ -356,21 +379,30 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
     if (!extractedText) return;
 
     setIsAnalyzing(true);
+    // 모든 이전 결과 초기화
     setAnalysisResult(null);
+    setFillBlankResult(null);
+    setMultipleChoiceResult(null);
+    setShortAnswerResult(null);
+    setSolveResult(null);
     setUserAnswers([]);
+    setFillBlankAnswers([]);
+    setMultipleChoiceAnswers([]);
+    setShortAnswerAnswers([]);
 
     try {
       const { data, error } = await supabase.functions.invoke("analyze-text", {
-        body: { text: extractedText },
+        body: { text: extractedText, questionCount: questionCount },
       });
 
       if (error) throw error;
 
       setAnalysisResult(data);
       setUserAnswers(new Array(data.questions.length).fill(null));
+      setProcessingProgress(100);
       toast({
         title: "분석 완료!",
-        description: "O/X 퀴즈와 요약이 생성되었습니다.",
+        description: `O/X 퀴즈 ${questionCount}개와 요약이 생성되었습니다.`,
       });
     } catch (error) {
       console.error("AI 분석 오류:", error);
@@ -392,17 +424,17 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
     // Check if answer is wrong and save to database
     if (analysisResult && answer !== analysisResult.questions[questionIndex].answer) {
       await saveWrongAnswer({
-        questionType: 'ox',
+        questionType: "ox",
         question: analysisResult.questions[questionIndex].question,
-        userAnswer: answer ? 'O' : 'X',
-        correctAnswer: analysisResult.questions[questionIndex].answer ? 'O' : 'X',
+        userAnswer: answer ? "O" : "X",
+        correctAnswer: analysisResult.questions[questionIndex].answer ? "O" : "X",
         explanation: analysisResult.questions[questionIndex].explanation,
       });
     }
   };
 
   const saveWrongAnswer = async (wrongAnswer: {
-    questionType: 'ox' | 'fill_blank' | 'multiple_choice' | 'short_answer';
+    questionType: "ox" | "fill_blank" | "multiple_choice" | "short_answer";
     question: string;
     userAnswer: string;
     correctAnswer: string;
@@ -410,10 +442,12 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
     hint?: string;
   }) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { error } = await supabase.from('wrong_answers').insert({
+      const { error } = await supabase.from("wrong_answers").insert({
         user_id: user.id,
         pdf_upload_id: currentPdfUploadId,
         question_type: wrongAnswer.questionType,
@@ -426,7 +460,7 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
 
       if (error) throw error;
     } catch (error) {
-      console.error('오답 저장 오류:', error);
+      console.error("오답 저장 오류:", error);
     }
   };
 
@@ -434,13 +468,21 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
     if (!extractedText) return;
 
     setIsGeneratingBlanks(true);
+    // 모든 이전 결과 초기화
+    setAnalysisResult(null);
     setFillBlankResult(null);
+    setMultipleChoiceResult(null);
+    setShortAnswerResult(null);
+    setSolveResult(null);
+    setUserAnswers([]);
     setFillBlankAnswers([]);
+    setMultipleChoiceAnswers([]);
+    setShortAnswerAnswers([]);
     setShowFillBlankAnswers([]);
 
     try {
       const { data, error } = await supabase.functions.invoke("generate-fill-blanks", {
-        body: { text: extractedText },
+        body: { text: extractedText, questionCount: questionCount },
       });
 
       if (error) throw error;
@@ -448,6 +490,7 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
       setFillBlankResult(data);
       setFillBlankAnswers(new Array(data.questions.length).fill(""));
       setShowFillBlankAnswers(new Array(data.questions.length).fill(false));
+      setProcessingProgress(100);
       toast({
         title: "생성 완료!",
         description: "빈칸 채우기 문제가 생성되었습니다.",
@@ -479,10 +522,10 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
     if (fillBlankResult) {
       const userAnswer = fillBlankAnswers[questionIndex].trim().toLowerCase();
       const correctAnswer = fillBlankResult.questions[questionIndex].answer.trim().toLowerCase();
-      
+
       if (userAnswer !== correctAnswer) {
         await saveWrongAnswer({
-          questionType: 'fill_blank',
+          questionType: "fill_blank",
           question: fillBlankResult.questions[questionIndex].question,
           userAnswer: fillBlankAnswers[questionIndex],
           correctAnswer: fillBlankResult.questions[questionIndex].answer,
@@ -496,18 +539,27 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
     if (!extractedText) return;
 
     setIsGeneratingMultipleChoice(true);
+    // 모든 이전 결과 초기화
+    setAnalysisResult(null);
+    setFillBlankResult(null);
     setMultipleChoiceResult(null);
+    setShortAnswerResult(null);
+    setSolveResult(null);
+    setUserAnswers([]);
+    setFillBlankAnswers([]);
     setMultipleChoiceAnswers([]);
+    setShortAnswerAnswers([]);
 
     try {
       const { data, error } = await supabase.functions.invoke("generate-multiple-choice", {
-        body: { text: extractedText },
+        body: { text: extractedText, questionCount: questionCount },
       });
 
       if (error) throw error;
 
       setMultipleChoiceResult(data);
       setMultipleChoiceAnswers(new Array(data.questions.length).fill(null));
+      setProcessingProgress(100);
       toast({
         title: "생성 완료!",
         description: "객관식 문제가 생성되었습니다.",
@@ -532,10 +584,13 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
     // Check if answer is wrong and save to database
     if (multipleChoiceResult && selectedOption !== multipleChoiceResult.questions[questionIndex].correctAnswer) {
       await saveWrongAnswer({
-        questionType: 'multiple_choice',
+        questionType: "multiple_choice",
         question: multipleChoiceResult.questions[questionIndex].question,
         userAnswer: multipleChoiceResult.questions[questionIndex].options[selectedOption],
-        correctAnswer: multipleChoiceResult.questions[questionIndex].options[multipleChoiceResult.questions[questionIndex].correctAnswer],
+        correctAnswer:
+          multipleChoiceResult.questions[questionIndex].options[
+            multipleChoiceResult.questions[questionIndex].correctAnswer
+          ],
         explanation: multipleChoiceResult.questions[questionIndex].explanation,
       });
     }
@@ -545,13 +600,21 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
     if (!extractedText) return;
 
     setIsGeneratingShortAnswer(true);
+    // 모든 이전 결과 초기화
+    setAnalysisResult(null);
+    setFillBlankResult(null);
+    setMultipleChoiceResult(null);
     setShortAnswerResult(null);
+    setSolveResult(null);
+    setUserAnswers([]);
+    setFillBlankAnswers([]);
+    setMultipleChoiceAnswers([]);
     setShortAnswerAnswers([]);
     setShowShortAnswers([]);
 
     try {
       const { data, error } = await supabase.functions.invoke("generate-short-answer", {
-        body: { text: extractedText },
+        body: { text: extractedText, questionCount: questionCount },
       });
 
       if (error) throw error;
@@ -559,6 +622,7 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
       setShortAnswerResult(data);
       setShortAnswerAnswers(new Array(data.questions.length).fill(""));
       setShowShortAnswers(new Array(data.questions.length).fill(false));
+      setProcessingProgress(100);
       toast({
         title: "생성 완료!",
         description: "주관식 문제가 생성되었습니다.",
@@ -589,12 +653,12 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
     // Save to wrong answers (user can review their answer)
     if (shortAnswerResult) {
       await saveWrongAnswer({
-        questionType: 'short_answer',
+        questionType: "short_answer",
         question: shortAnswerResult.questions[questionIndex].question,
         userAnswer: shortAnswerAnswers[questionIndex],
         correctAnswer: shortAnswerResult.questions[questionIndex].answer,
         explanation: shortAnswerResult.questions[questionIndex].explanation,
-        hint: shortAnswerResult.questions[questionIndex].keywords.join(', '),
+        hint: shortAnswerResult.questions[questionIndex].keywords.join(", "),
       });
     }
   };
@@ -603,7 +667,16 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
     if (!extractedText) return;
 
     setIsSolving(true);
+    // 모든 이전 결과 초기화
+    setAnalysisResult(null);
+    setFillBlankResult(null);
+    setMultipleChoiceResult(null);
+    setShortAnswerResult(null);
     setSolveResult(null);
+    setUserAnswers([]);
+    setFillBlankAnswers([]);
+    setMultipleChoiceAnswers([]);
+    setShortAnswerAnswers([]);
 
     try {
       const { data, error } = await supabase.functions.invoke("solve-problems", {
@@ -613,6 +686,7 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
       if (error) throw error;
 
       setSolveResult(data);
+      setProcessingProgress(100);
       toast({
         title: "풀이 완료!",
         description: "AI가 문제를 풀어냈습니다.",
@@ -630,7 +704,7 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
   };
 
   const formatText = (text: string) => {
-    return text.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+    return text.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
   };
 
   const downloadHtml = () => {
@@ -642,7 +716,7 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 문제 풀이 결과 - ${fileName.replace('.pdf', '')}</title>
+  <title>AI 문제 풀이 결과 - ${fileName.replace(".pdf", "")}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -731,33 +805,41 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
 <body>
   <div class="container">
     <h1>🎓 AI 문제 풀이 결과</h1>
-    <div class="subtitle">${fileName.replace('.pdf', '')}</div>
+    <div class="subtitle">${fileName.replace(".pdf", "")}</div>
     
-    ${solveResult.problems.map((problem, idx) => `
+    ${solveResult.problems
+      .map(
+        (problem, idx) => `
       <div class="problem-card">
         <div class="problem-number">문제 ${idx + 1}</div>
         
         <div class="problem-section">
           <div class="section-title">📝 문제</div>
-          <div class="problem-text">${formatText(problem.problem).split('\n').join('<br>')}</div>
+          <div class="problem-text">${formatText(problem.problem).split("\n").join("<br>")}</div>
         </div>
         
         <div class="problem-section">
           <div class="section-title">💡 해답 및 풀이</div>
-          <div class="solution-text">${formatText(problem.solution).split('\n').join('<br>')}</div>
+          <div class="solution-text">${formatText(problem.solution).split("\n").join("<br>")}</div>
         </div>
         
-        ${problem.keyPoints ? `
+        ${
+          problem.keyPoints
+            ? `
           <div class="problem-section">
             <div class="section-title">📌 핵심 포인트</div>
-            <div class="keypoints-text">${formatText(problem.keyPoints).split('\n').join('<br>')}</div>
+            <div class="keypoints-text">${formatText(problem.keyPoints).split("\n").join("<br>")}</div>
           </div>
-        ` : ''}
+        `
+            : ""
+        }
       </div>
-    `).join('')}
+    `,
+      )
+      .join("")}
     
     <div class="footer">
-      생성일시: ${new Date().toLocaleString('ko-KR')}<br>
+      생성일시: ${new Date().toLocaleString("ko-KR")}<br>
       AI 문제 풀이 시스템
     </div>
   </div>
@@ -765,11 +847,11 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
 </html>
     `;
 
-    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `${fileName.replace('.pdf', '')}_풀이결과.html`;
+    a.download = `${fileName.replace(".pdf", "")}_풀이결과.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -781,23 +863,86 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
     });
   };
 
+  // 시뮬레이션된 진행률을 위한 useEffect
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    if (isAnalyzing || isGeneratingBlanks || isGeneratingMultipleChoice || isGeneratingShortAnswer || isSolving) {
+      setProcessingProgress(0);
+      let progress = 0;
+
+      interval = setInterval(() => {
+        progress += Math.random() * 15;
+        if (progress > 90) progress = 90;
+        setProcessingProgress(Math.round(progress));
+      }, 500);
+    } else {
+      setProcessingProgress(0);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isAnalyzing, isGeneratingBlanks, isGeneratingMultipleChoice, isGeneratingShortAnswer, isSolving]);
+
+  const getLoadingMessage = () => {
+    if (isProcessing) return "PDF 텍스트 추출 중...";
+    if (isAnalyzing) return `O/X 퀴즈 ${questionCount}개 생성 중...`;
+    if (isGeneratingBlanks) return `빈칸 채우기 ${questionCount}개 생성 중...`;
+    if (isGeneratingMultipleChoice) return `객관식 문제 ${questionCount}개 생성 중...`;
+    if (isGeneratingShortAnswer) return `주관식 문제 ${questionCount}개 생성 중...`;
+    if (isSolving) return "AI 문제 풀이 중...";
+    return "";
+  };
+
+  const isLoading =
+    isProcessing ||
+    isAnalyzing ||
+    isGeneratingBlanks ||
+    isGeneratingMultipleChoice ||
+    isGeneratingShortAnswer ||
+    isSolving;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/30 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/30 p-4 md:p-8 relative">
+      {isLoading && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <Card className="p-8 max-w-md w-full mx-4">
+            <div className="space-y-6">
+              <div className="flex flex-col items-center gap-4">
+                <div className="relative w-20 h-20">
+                  <div className="absolute inset-0 border-4 border-primary/20 rounded-full"></div>
+                  <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                </div>
+                <div className="text-center space-y-2">
+                  <h3 className="text-lg font-semibold">{getLoadingMessage()}</h3>
+                  <p className="text-sm text-muted-foreground">잠시만 기다려주세요...</p>
+                  <div className="text-2xl font-bold text-primary">{processingProgress}%</div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-primary to-accent rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${processingProgress}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="text-center space-y-2 py-8">
           <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            PDF 텍스트 추출
+            Grade dream만의 문제 만들기
           </h1>
-          <p className="text-lg text-muted-foreground">PDF 파일을 업로드하면 텍스트를 자동으로 추출해드립니다</p>
+          <p className="text-lg text-muted-foreground">PDF 파일을 업로드하면 자동으로 문제를 만들어드립니다</p>
         </div>
 
         {uploadHistory.length > 0 && (
           <Card className="p-4">
-            <Button
-              variant="outline"
-              onClick={() => setShowHistory(!showHistory)}
-              className="w-full gap-2"
-            >
+            <Button variant="outline" onClick={() => setShowHistory(!showHistory)} className="w-full gap-2">
               <History className="w-4 h-4" />
               업로드 기록 {showHistory ? "숨기기" : "보기"} ({uploadHistory.length})
             </Button>
@@ -809,21 +954,13 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
                     key={record.id}
                     className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/5 transition-colors"
                   >
-                    <button
-                      onClick={() => loadUploadedPdf(record)}
-                      className="flex-1 text-left"
-                    >
+                    <button onClick={() => loadUploadedPdf(record)} className="flex-1 text-left">
                       <p className="font-medium truncate">{record.file_name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {new Date(record.created_at).toLocaleString('ko-KR')}
+                        {new Date(record.created_at).toLocaleString("ko-KR")}
                       </p>
                     </button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => deleteUpload(record)}
-                      className="ml-2"
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => deleteUpload(record)} className="ml-2">
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>
@@ -854,7 +991,7 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
               <h3 className="text-xl font-semibold mb-2">
                 {isProcessing ? "PDF 처리 중..." : "PDF 파일을 드래그하거나 클릭하세요"}
               </h3>
-              <p className="text-muted-foreground">지원 형식: PDF</p>
+              <p className="text-muted-foreground">지원 형식: PDF(50MB이하)</p>
             </div>
             <label htmlFor="file-upload">
               <Button variant="default" size="lg" className="cursor-pointer" disabled={isProcessing} asChild>
@@ -876,34 +1013,71 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
         </Card>
 
         {extractedText && (
-          <Card className="p-6 flex items-center justify-center gap-4 flex-wrap animate-in fade-in-50 duration-500">
-            {mode === 'full' && (
-              <>
-                <Button variant="default" size="lg" onClick={analyzeText} disabled={isAnalyzing} className="gap-2">
-                  <Sparkles className="w-5 h-5" />
-                  {isAnalyzing ? "O/X퀴즈 생성 중..." : "O/X퀴즈"}
-                </Button>
-                <Button variant="secondary" size="lg" onClick={generateFillBlanks} disabled={isGeneratingBlanks} className="gap-2">
-                  <PenLine className="w-5 h-5" />
-                  {isGeneratingBlanks ? "빈칸 문제 생성 중..." : "빈칸 문제"}
-                </Button>
-                <Button variant="outline" size="lg" onClick={generateMultipleChoice} disabled={isGeneratingMultipleChoice} className="gap-2">
-                  <CheckCircle2 className="w-5 h-5" />
-                  {isGeneratingMultipleChoice ? "객관식 생성 중..." : "객관식 문제"}
-                </Button>
-                <Button variant="ghost" size="lg" onClick={generateShortAnswer} disabled={isGeneratingShortAnswer} className="gap-2">
-                  <FileText className="w-5 h-5" />
-                  {isGeneratingShortAnswer ? "주관식 생성 중..." : "주관식 문제"}
-                </Button>
-              </>
+          <>
+            {mode === "full" && (
+              <Card className="p-4 animate-in fade-in-50 duration-500">
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-sm font-medium">문제 수:</span>
+                  {([5, 10, 15] as const).map((count) => (
+                    <Button
+                      key={count}
+                      variant={questionCount === count ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setQuestionCount(count)}
+                    >
+                      {count}개
+                    </Button>
+                  ))}
+                </div>
+              </Card>
             )}
-            {mode === 'solve-only' && (
-              <Button variant="outline" size="lg" onClick={solveProblems} disabled={isSolving} className="gap-2">
-                <Brain className="w-5 h-5" />
-                {isSolving ? "AI 풀이 중..." : "AI 문제 풀이"}
-              </Button>
-            )}
-          </Card>
+            <Card className="p-6 flex items-center justify-center gap-4 flex-wrap animate-in fade-in-50 duration-500">
+              {mode === "full" && (
+                <>
+                  <Button variant="default" size="lg" onClick={analyzeText} disabled={isAnalyzing} className="gap-2">
+                    <Sparkles className="w-5 h-5" />
+                    {isAnalyzing ? "O/X퀴즈 생성 중..." : "O/X퀴즈"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    onClick={generateFillBlanks}
+                    disabled={isGeneratingBlanks}
+                    className="gap-2"
+                  >
+                    <PenLine className="w-5 h-5" />
+                    {isGeneratingBlanks ? "빈칸 문제 생성 중..." : "빈칸 문제"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={generateMultipleChoice}
+                    disabled={isGeneratingMultipleChoice}
+                    className="gap-2"
+                  >
+                    <CheckCircle2 className="w-5 h-5" />
+                    {isGeneratingMultipleChoice ? "객관식 생성 중..." : "객관식 문제"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="lg"
+                    onClick={generateShortAnswer}
+                    disabled={isGeneratingShortAnswer}
+                    className="gap-2"
+                  >
+                    <FileText className="w-5 h-5" />
+                    {isGeneratingShortAnswer ? "주관식 생성 중..." : "주관식 문제"}
+                  </Button>
+                </>
+              )}
+              {mode === "solve-only" && (
+                <Button variant="outline" size="lg" onClick={solveProblems} disabled={isSolving} className="gap-2">
+                  <Brain className="w-5 h-5" />
+                  {isSolving ? "AI 풀이 중..." : "AI 문제 풀이"}
+                </Button>
+              )}
+            </Card>
+          </>
         )}
 
         {analysisResult && (
@@ -1057,9 +1231,7 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
                             ) : (
                               <>
                                 <XCircle className="w-5 h-5 text-red-600" />
-                                <span className="font-semibold text-red-600">
-                                  오답입니다. 정답: {q.answer}
-                                </span>
+                                <span className="font-semibold text-red-600">오답입니다. 정답: {q.answer}</span>
                               </>
                             )}
                           </div>
@@ -1148,8 +1320,7 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
                             )}
                           </div>
                           <div className="text-sm text-muted-foreground bg-background/50 p-3 rounded">
-                            <span className="font-semibold">해설:</span>{" "}
-                            <LatexRenderer text={q.explanation} />
+                            <span className="font-semibold">해설:</span> <LatexRenderer text={q.explanation} />
                           </div>
                         </div>
                       )}
@@ -1214,9 +1385,7 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
                       {isAnswered && (
                         <div className="space-y-3 mt-3 pt-3 border-t">
                           <div className="bg-green-50 dark:bg-green-950/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
-                            <p className="font-medium text-sm text-green-600 dark:text-green-400 mb-2">
-                              ✅ 모범 답안
-                            </p>
+                            <p className="font-medium text-sm text-green-600 dark:text-green-400 mb-2">✅ 모범 답안</p>
                             <div className="text-sm">
                               <LatexRenderer text={q.answer} />
                             </div>
@@ -1228,7 +1397,10 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
                             </p>
                             <div className="flex flex-wrap gap-2">
                               {q.keywords.map((keyword, kidx) => (
-                                <span key={kidx} className="px-2 py-1 bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 rounded text-sm">
+                                <span
+                                  key={kidx}
+                                  className="px-2 py-1 bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 rounded text-sm"
+                                >
                                   {keyword}
                                 </span>
                               ))}
@@ -1236,18 +1408,14 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
                           </div>
 
                           <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg">
-                            <p className="font-medium text-sm text-blue-900 dark:text-blue-100 mb-2">
-                              📖 해설
-                            </p>
+                            <p className="font-medium text-sm text-blue-900 dark:text-blue-100 mb-2">📖 해설</p>
                             <div className="text-sm text-blue-800 dark:text-blue-200">
                               <LatexRenderer text={q.explanation} />
                             </div>
                           </div>
 
                           <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg">
-                            <p className="font-medium text-sm text-gray-700 dark:text-gray-300 mb-2">
-                              ✍️ 내 답변
-                            </p>
+                            <p className="font-medium text-sm text-gray-700 dark:text-gray-300 mb-2">✍️ 내 답변</p>
                             <div className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
                               {userAnswer}
                             </div>
@@ -1276,10 +1444,7 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
             </div>
             <div className="space-y-6">
               {solveResult.problems.map((problem, idx) => (
-                <div
-                  key={idx}
-                  className="p-4 border border-border rounded-lg hover:border-primary/50 transition-all"
-                >
+                <div key={idx} className="p-4 border border-border rounded-lg hover:border-primary/50 transition-all">
                   <div className="space-y-4">
                     <div className="flex items-start gap-2">
                       <span className="font-semibold text-primary">{idx + 1}.</span>
@@ -1290,7 +1455,7 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
                             <LatexRenderer text={formatText(problem.problem)} />
                           </div>
                         </div>
-                        
+
                         <div className="bg-primary/5 p-4 rounded">
                           <p className="font-medium text-sm text-primary mb-3">💡 해답 및 풀이</p>
                           <div className="prose prose-sm max-w-none">
@@ -1299,7 +1464,7 @@ export const PdfUploader = ({ mode = 'full' }: PdfUploaderProps) => {
                             </div>
                           </div>
                         </div>
-                        
+
                         {problem.keyPoints && (
                           <div className="bg-accent/10 p-3 rounded">
                             <p className="font-medium text-sm text-accent-foreground mb-2">📌 핵심 포인트</p>

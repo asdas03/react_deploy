@@ -10,6 +10,7 @@ import sogangLogo from "@/assets/sogang-logo.png";
 import seoulLogo from "@/assets/seoul-logo.png";
 import koreaLogo from "@/assets/korea-logo.png";
 import yonseiLogo from "@/assets/yonsei-logo.png";
+import gradeDreamLogo from "@/assets/grade-dream-logo.png";
 
 const Menu = () => {
   const [loading, setLoading] = useState(true);
@@ -123,9 +124,7 @@ const Menu = () => {
         <div className="flex items-center justify-center min-h-[calc(100vh-100px)]">
           <div className="w-full max-w-4xl">
             <div className="text-center mb-8">
-              <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                AI 학습 도우미
-              </h1>
+              <img src={gradeDreamLogo} alt="Grade Dream" className="mx-auto h-64 mb-2" />
               <p className="text-muted-foreground">원하는 기능을 선택하세요</p>
             </div>
 
@@ -174,9 +173,7 @@ const Menu = () => {
                   <CardDescription>틀린 문제를 복습하세요</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button className="w-full">
-                    시작하기
-                  </Button>
+                  <Button className="w-full">시작하기</Button>
                 </CardContent>
               </Card>
 
@@ -192,9 +189,7 @@ const Menu = () => {
                   <CardDescription>약점을 분석하여 맞춤 문제를 추천합니다</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button className="w-full">
-                    시작하기
-                  </Button>
+                  <Button className="w-full">시작하기</Button>
                 </CardContent>
               </Card>
             </div>
